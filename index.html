@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MFCC Extractor App</title>
+    <title>MFCC Extractor - Web App</title>
+    <script src="https://cdn.jsdelivr.net/npm/meyda@5.6.0/dist/web/meyda.min.js"></script>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -11,109 +12,235 @@
             margin: 0 auto;
             padding: 20px;
             line-height: 1.6;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
         }
         .header {
             text-align: center;
             margin-bottom: 30px;
         }
-        .code {
-            background-color: #f4f4f4;
+        .upload-area {
+            border: 2px dashed #ccc;
+            border-radius: 8px;
+            padding: 40px;
+            text-align: center;
+            margin: 20px 0;
+            transition: border-color 0.3s;
+        }
+        .upload-area:hover {
+            border-color: #007bff;
+        }
+        .upload-area.dragover {
+            border-color: #007bff;
+            background-color: #f8f9fa;
+        }
+        #fileInput {
+            margin: 10px 0;
+        }
+        .results {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 5px;
+            display: none;
+        }
+        .mfcc-display {
+            font-family: 'Courier New', monospace;
+            background: #2d3748;
+            color: #e2e8f0;
             padding: 10px;
             border-radius: 5px;
-            font-family: 'Courier New', monospace;
+            overflow-x: auto;
+            white-space: pre-wrap;
+            max-height: 300px;
+            overflow-y: auto;
         }
-        .section {
-            margin-bottom: 20px;
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #3498db;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
     </style>
 </head>
 <body>
-    <div class="header">
-        <h1>🎵 MFCC Extractor App</h1>
-        <p>A Python GUI application to extract Mel-Frequency Cepstral Coefficients from audio files</p>
+    <div class="container">
+        <div class="header">
+            <h1>🎵 MFCC Extractor - Web App</h1>
+            <p>Extract Mel-Frequency Cepstral Coefficients from audio files directly in your browser</p>
+        </div>
+
+        <div class="upload-area" id="uploadArea">
+            <p>Drag and drop an audio file here, or click to select</p>
+            <input type="file" id="fileInput" accept="audio/*" style="display: none;">
+            <button onclick="document.getElementById('fileInput').click()">Select Audio File</button>
+        </div>
+
+        <div class="results" id="results">
+            <h3>Results:</h3>
+            <div id="audioInfo"></div>
+            <div id="mfccContainer">
+                <h4>MFCC Coefficients:</h4>
+                <div class="mfcc-display" id="mfccDisplay"></div>
+            </div>
+        </div>
     </div>
 
-    <div class="section">
-        <h2>🚀 Quick Start</h2>
-        <p>This is a desktop Python application. To use it:</p>
-        <ol>
-            <li>Clone or download this repository</li>
-            <li>Install Python dependencies: <code class="code">pip install -r requirements.txt</code></li>
-            <li>Run the app: <code class="code">python app.py</code></li>
-        </ol>
-    </div>
+    <script>
+        let audioContext;
+        let audioBuffer;
 
-    <div class="section">
-        <h2>✨ Features</h2>
-        <ul>
-            <li>Graphical User Interface with drag-and-drop support</li>
-            <li>Extract MFCC features from various audio formats (WAV, MP3, FLAC, OGG)</li>
-            <li>Real-time display of MFCC coefficients and audio information</li>
-            <li>Easy file selection via browse dialog or drag-and-drop</li>
-        </ul>
-    </div>
+        // Initialize Web Audio API
+        function initAudioContext() {
+            if (!audioContext) {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            }
+        }
 
-    <div class="section">
-        <h2>📋 Requirements</h2>
-        <ul>
-            <li>Python 3.6+</li>
-            <li>PyQt5 (for GUI)</li>
-            <li>librosa (for audio processing)</li>
-            <li>numpy (for numerical operations)</li>
-        </ul>
-        <p>All dependencies are listed in <code>requirements.txt</code></p>
-    </div>
+        // Handle file selection
+        document.getElementById('fileInput').addEventListener('change', handleFileSelect);
 
-    <div class="section">
-        <h2>🎯 How to Use</h2>
-        <p>After launching the app:</p>
-        <ol>
-            <li>Click "Select File" to browse for an audio file, or</li>
-            <li>Drag and drop an audio file onto the drop area</li>
-            <li>View the extracted MFCC information in the results area</li>
-        </ol>
-    </div>
+        // Drag and drop functionality
+        const uploadArea = document.getElementById('uploadArea');
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                handleFile(files[0]);
+            }
+        });
 
-    <div class="section">
-        <h2>🔧 Supported Audio Formats</h2>
-        <ul>
-            <li>WAV</li>
-            <li>MP3</li>
-            <li>FLAC</li>
-            <li>OGG</li>
-            <li>And other formats supported by librosa</li>
-        </ul>
-    </div>
+        function handleFileSelect(event) {
+            const file = event.target.files[0];
+            if (file) {
+                handleFile(file);
+            }
+        }
 
-    <div class="section">
-        <h2>📁 Project Structure</h2>
-        <ul>
-            <li><code>app.py</code> - Main GUI application</li>
-            <li><code>requirements.txt</code> - Python dependencies</li>
-            <li><code>README.md</code> - Detailed documentation</li>
-        </ul>
-    </div>
+        async function handleFile(file) {
+            try {
+                initAudioContext();
+                showLoading();
 
-    <div class="section">
-        <h2>🐛 Troubleshooting</h2>
-        <ul>
-            <li>Ensure all dependencies are installed</li>
-            <li>Make sure you have a graphical desktop environment</li>
-            <li>For large files, processing may take time</li>
-            <li>Check the console for any error messages</li>
-        </ul>
-    </div>
+                // Load and decode audio
+                const arrayBuffer = await file.arrayBuffer();
+                audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
 
-    <div class="section">
-        <h2>📖 Learn More</h2>
-        <p>
-            <a href="https://github.com/pirru1004/AppToMFCC">View on GitHub</a> |
-            <a href="https://github.com/pirru1004/AppToMFCC/blob/main/README.md">Read the README</a>
-        </p>
-    </div>
+                // Extract MFCC
+                const mfcc = extractMFCC(audioBuffer);
 
-    <footer style="text-align: center; margin-top: 40px; color: #666;">
-        <p>Built with Python, PyQt5, and librosa</p>
-    </footer>
+                // Display results
+                displayResults(file, mfcc);
+
+            } catch (error) {
+                console.error('Error processing audio:', error);
+                alert('Error processing audio file. Please try a different file.');
+                hideLoading();
+            }
+        }
+
+        function extractMFCC(buffer) {
+            const channelData = buffer.getChannelData(0); // Use first channel
+            const sampleRate = buffer.sampleRate;
+
+            // Meyda MFCC extraction
+            // We'll extract MFCC for the entire audio (this might be memory intensive for long files)
+            // For demo, we'll take samples at regular intervals
+            const frameSize = 2048;
+            const hopSize = 1024;
+            const mfccCoeffs = [];
+
+            for (let i = 0; i < channelData.length - frameSize; i += hopSize) {
+                const frame = channelData.slice(i, i + frameSize);
+                const features = Meyda.extract(['mfcc'], frame, {
+                    sampleRate: sampleRate,
+                    bufferSize: frameSize,
+                    numberOfMFCCCoefficients: 13
+                });
+                if (features && features.mfcc) {
+                    mfccCoeffs.push(features.mfcc);
+                }
+            }
+
+            return mfccCoeffs;
+        }
+
+        function displayResults(file, mfcc) {
+            const resultsDiv = document.getElementById('results');
+            const audioInfoDiv = document.getElementById('audioInfo');
+            const mfccDisplayDiv = document.getElementById('mfccDisplay');
+
+            // Audio info
+            audioInfoDiv.innerHTML = `
+                <p><strong>File:</strong> ${file.name}</p>
+                <p><strong>Duration:</strong> ${audioBuffer.duration.toFixed(2)} seconds</p>
+                <p><strong>Sample Rate:</strong> ${audioBuffer.sampleRate} Hz</p>
+                <p><strong>Channels:</strong> ${audioBuffer.numberOfChannels}</p>
+                <p><strong>MFCC Frames:</strong> ${mfcc.length}</p>
+            `;
+
+            // MFCC display (show first few frames)
+            let mfccText = '';
+            const maxFrames = Math.min(10, mfcc.length);
+            for (let i = 0; i < maxFrames; i++) {
+                mfccText += `Frame ${i}: [${mfcc[i].map(x => x.toFixed(4)).join(', ')}]\n`;
+            }
+            if (mfcc.length > 10) {
+                mfccText += `... and ${mfcc.length - 10} more frames`;
+            }
+            mfccDisplayDiv.textContent = mfccText;
+
+            resultsDiv.style.display = 'block';
+            hideLoading();
+        }
+
+        function showLoading() {
+            const button = document.querySelector('button');
+            button.disabled = true;
+            button.innerHTML = '<div class="loading"></div> Processing...';
+        }
+
+        function hideLoading() {
+            const button = document.querySelector('button');
+            button.disabled = false;
+            button.innerHTML = 'Select Audio File';
+        }
+    </script>
 </body>
 </html>
