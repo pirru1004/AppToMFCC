@@ -245,7 +245,7 @@
                 const features = Meyda.extract(['mfcc', 'powerSpectrum'], frame, {
                     sampleRate: sampleRate,
                     bufferSize: frameSize,
-                    numberOfMFCCCoefficients: 13
+                    numberOfMFCCCoefficients: 24
                 });
                 if (features && features.mfcc) {
                     mfccCoeffs.push(features.mfcc);
@@ -571,7 +571,14 @@
             ctx.lineTo(30, height - 40);
             ctx.stroke();
 
-            // MFCC coefficient labels
+            // MFCC coefficient labels with frequency references
+            const freqRanges = [
+                '0-300Hz', '300-600Hz', '600-900Hz', '900-1200Hz', '1200-1500Hz', '1500-1800Hz',
+                '1800-2200Hz', '2200-2600Hz', '2600-3000Hz', '3000-3500Hz', '3500-4000Hz', '4000-4500Hz',
+                '4500-5200Hz', '5200-5900Hz', '5900-6600Hz', '6600-7400Hz', '7400-8200Hz', '8200-9000Hz',
+                '9000-10000Hz', '10000-11000Hz', '11000-12000Hz', '12000-13000Hz', '13000-14000Hz', '14000-16000Hz'
+            ];
+
             for (let i = 0; i < nCoeffs; i++) {
                 const y = 20 + (i / (nCoeffs - 1)) * (height - 60);
                 ctx.beginPath();
@@ -579,6 +586,9 @@
                 ctx.lineTo(35, y);
                 ctx.stroke();
                 ctx.fillText(`MFCC ${i}`, 40, y + 4);
+                if (freqRanges[i]) {
+                    ctx.fillText(`(${freqRanges[i]})`, 100, y + 4);
+                }
             }
 
             // X-axis (time) - bottom
