@@ -388,7 +388,8 @@
                 const spectrum = spectra[timeIndex];
 
                 for (let y = 0; y < height; y++) {
-                    const freqIndex = Math.floor((y / height) * freqBins);
+                    // Flip y so high frequencies are at top
+                    const freqIndex = Math.floor(((height - y) / height) * freqBins);
                     const magnitude = spectrum[freqIndex] || 0;
 
                     // Normalize and convert to color (log scale for better visualization)
