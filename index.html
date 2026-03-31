@@ -63,16 +63,29 @@
             border-radius: 5px;
             box-shadow: 0 1px 3px rgba(0,0,0,0.1);
         }
-        #waveformCanvas, #spectrogramCanvas {
+        .mfcc-spectrogram-container {
+            margin: 20px 0;
+            padding: 15px;
+            background: white;
+            border-radius: 5px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        #waveformCanvas, #spectrogramCanvas, #mfccSpectrogramCanvas {
             width: 100%;
-            height: 300px;
             border: 1px solid #ddd;
             border-radius: 3px;
         }
         #waveformCanvas {
+            height: 300px;
             background: #fafafa;
         }
         #spectrogramCanvas {
+            height: 300px;
+            background: #000;
+            image-rendering: pixelated;
+        }
+        #mfccSpectrogramCanvas {
+            height: 400px;
             background: #000;
             image-rendering: pixelated;
         }
@@ -139,6 +152,11 @@
         <div class="spectrogram-container">
             <h3>Spectrogram (Frequency Domain)</h3>
             <canvas id="spectrogramCanvas"></canvas>
+        </div>
+
+        <div class="mfcc-spectrogram-container">
+            <h3>MFCC Spectrogram</h3>
+            <canvas id="mfccSpectrogramCanvas"></canvas>
         </div>
 
         <div class="results" id="results">
@@ -268,6 +286,7 @@
             // Draw visualizations
             drawWaveform();
             drawSpectrogram(spectra);
+            drawMFCCSpectrogram(mfcc);
 
             resultsDiv.style.display = 'block';
             hideLoading();
@@ -484,6 +503,145 @@
             ctx.fillText('High', barX - 25, barY + 10);
             ctx.fillText('Energy', barX - 30, barY + barHeight / 2);
             ctx.fillText('Low', barX - 20, barY + barHeight - 5);
+        }
+
+        function drawMFCCSpectrogram(mfccFrames) {
+            const canvas = document.getElementById('mfccSpectrogramCanvas');
+            const ctx = canvas.getContext('2d');
+            const width = canvas.width = canvas.offsetWidth;
+            const height = canvas.height = 400;
+
+            if (mfccFrames.length === 0) return;
+
+            const timeFrames = mfccFrames.length;
+            const nCoeffs = mfccFrames[0].length; // Should be 13
+
+            // Create image data
+            const imageData = ctx.createImageData(width, height);
+            const data = imageData.data;
+
+            // For each pixel
+            for (let x = 0; x < width; x++) {
+                const timeIndex = Math.floor((x / width) * timeFrames);
+                const mfccCoeffs = mfccFrames[timeIndex];
+
+                for (let y = 0; y < height; y++) {
+                    const coeffIndex = Math.floor((y / height) * nCoeffs);
+                    const coeffValue = mfccCoeffs[coeffIndex] || 0;
+
+                    // Normalize MFCC values (typically -100 to +100, but can vary)
+                    // Use a diverging color scale: blue (negative) -> white (zero) -> red (positive)
+                    const normalized = Math.max(-1, Math.min(1, coeffValue / 50)); // Scale by 50 for typical range
+
+                    let r, g, b;
+                    if (normalized < 0) {
+                        // Blue to white
+                        const intensity = Math.abs(normalized);
+                        r = Math.floor(255 * intensity);
+                        g = Math.floor(255 * intensity);
+                        b = 255;
+                    } else {
+                        // White to red
+                        const intensity = normalized;
+                        r = 255;
+                        g = Math.floor(255 * (1 - intensity));
+                        b = Math.floor(255 * (1 - intensity));
+                    }
+
+                    const pixelIndex = (y * width + x) * 4;
+                    data[pixelIndex] = r;
+                    data[pixelIndex + 1] = g;
+                    data[pixelIndex + 2] = b;
+                    data[pixelIndex + 3] = 255;
+                }
+            }
+
+            // Draw the MFCC spectrogram
+            ctx.putImageData(imageData, 0, 0);
+
+            // Draw axes and labels
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 1;
+            ctx.font = '12px Arial';
+            ctx.fillStyle = '#fff';
+
+            // Y-axis (MFCC coefficients) - left side
+            ctx.beginPath();
+            ctx.moveTo(30, 20);
+            ctx.lineTo(30, height - 40);
+            ctx.stroke();
+
+            // MFCC coefficient labels
+            for (let i = 0; i < nCoeffs; i++) {
+                const y = 20 + (i / (nCoeffs - 1)) * (height - 60);
+                ctx.beginPath();
+                ctx.moveTo(25, y);
+                ctx.lineTo(35, y);
+                ctx.stroke();
+                ctx.fillText(`MFCC ${i}`, 40, y + 4);
+            }
+
+            // X-axis (time) - bottom
+            ctx.beginPath();
+            ctx.moveTo(30, height - 40);
+            ctx.lineTo(width - 20, height - 40);
+            ctx.stroke();
+
+            // Time ticks and labels
+            const duration = audioBuffer.duration;
+            const timeTicks = [0, duration * 0.25, duration * 0.5, duration * 0.75, duration];
+            timeTicks.forEach((time, index) => {
+                const x = 30 + ((width - 50) * (time / duration));
+                ctx.beginPath();
+                ctx.moveTo(x, height - 35);
+                ctx.lineTo(x, height - 45);
+                ctx.stroke();
+                ctx.fillText(time.toFixed(1) + 's', x - 15, height - 20);
+            });
+
+            // Axis labels
+            ctx.save();
+            ctx.translate(15, height / 2);
+            ctx.rotate(-Math.PI / 2);
+            ctx.fillText('MFCC Coefficients', 0, 0);
+            ctx.restore();
+
+            ctx.fillText('Time (s)', width / 2 - 30, height - 5);
+
+            // Colorbar for MFCC values
+            const barWidth = 20;
+            const barHeight = height - 60;
+            const barX = width - 40;
+            const barY = 20;
+
+            // Draw diverging colorbar
+            for (let i = 0; i < barHeight; i++) {
+                const normalized = 1 - (i / barHeight) * 2; // -1 to 1
+
+                let r, g, b;
+                if (normalized < 0) {
+                    const intensity = Math.abs(normalized);
+                    r = Math.floor(255 * intensity);
+                    g = Math.floor(255 * intensity);
+                    b = 255;
+                } else {
+                    const intensity = normalized;
+                    r = 255;
+                    g = Math.floor(255 * (1 - intensity));
+                    b = Math.floor(255 * (1 - intensity));
+                }
+
+                ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+                ctx.fillRect(barX, barY + i, barWidth, 1);
+            }
+
+            // Colorbar labels
+            ctx.fillStyle = '#fff';
+            ctx.fillText('Positive', barX - 35, barY + 10);
+            ctx.fillText('Values', barX - 30, barY + barHeight / 4);
+            ctx.fillText('Zero', barX - 20, barY + barHeight / 2);
+            ctx.fillText('Negative', barX - 35, barY + 3 * barHeight / 4);
+            ctx.fillText('Values', barX - 30, barY + barHeight - 10);
         }
 
         function showLoading() {
