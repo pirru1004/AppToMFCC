@@ -56,12 +56,20 @@
             border-radius: 5px;
             box-shadow: 0 1px 3px rgba(0,0,0,0.1);
         }
-        #waveformCanvas {
+        .spectrogram-container {
+            margin: 20px 0;
+            padding: 15px;
+            background: white;
+            border-radius: 5px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        #spectrogramCanvas {
             width: 100%;
             height: 200px;
             border: 1px solid #ddd;
             border-radius: 3px;
-            background: #fafafa;
+            background: #000;
+            image-rendering: pixelated;
         }
         .mfcc-display {
             font-family: 'Courier New', monospace;
@@ -123,6 +131,11 @@
             <canvas id="waveformCanvas"></canvas>
         </div>
 
+        <div class="spectrogram-container">
+            <h3>Spectrogram (Frequency Domain)</h3>
+            <canvas id="spectrogramCanvas"></canvas>
+        </div>
+
         <div class="results" id="results">
             <h3>Results:</h3>
             <div id="audioInfo"></div>
@@ -181,11 +194,11 @@
                 const arrayBuffer = await file.arrayBuffer();
                 audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
 
-                // Extract MFCC
-                const mfcc = extractMFCC(audioBuffer);
+                // Extract MFCC and spectra
+                const { mfcc, spectra } = extractMFCC(audioBuffer);
 
                 // Display results
-                displayResults(file, mfcc);
+                displayResults(file, mfcc, spectra);
 
             } catch (error) {
                 console.error('Error processing audio:', error);
@@ -198,16 +211,15 @@
             const channelData = buffer.getChannelData(0); // Use first channel
             const sampleRate = buffer.sampleRate;
 
-            // Meyda MFCC extraction
-            // We'll extract MFCC for the entire audio (this might be memory intensive for long files)
-            // For demo, we'll take samples at regular intervals
+            // Parameters
             const frameSize = 2048;
             const hopSize = 1024;
             const mfccCoeffs = [];
+            const spectra = [];
 
             for (let i = 0; i < channelData.length - frameSize; i += hopSize) {
                 const frame = channelData.slice(i, i + frameSize);
-                const features = Meyda.extract(['mfcc'], frame, {
+                const features = Meyda.extract(['mfcc', 'powerSpectrum'], frame, {
                     sampleRate: sampleRate,
                     bufferSize: frameSize,
                     numberOfMFCCCoefficients: 13
@@ -215,12 +227,15 @@
                 if (features && features.mfcc) {
                     mfccCoeffs.push(features.mfcc);
                 }
+                if (features && features.powerSpectrum) {
+                    spectra.push(features.powerSpectrum);
+                }
             }
 
-            return mfccCoeffs;
+            return { mfcc: mfccCoeffs, spectra: spectra };
         }
 
-        function displayResults(file, mfcc) {
+        function displayResults(file, mfcc, spectra) {
             const resultsDiv = document.getElementById('results');
             const audioInfoDiv = document.getElementById('audioInfo');
             const mfccDisplayDiv = document.getElementById('mfccDisplay');
@@ -245,8 +260,9 @@
             }
             mfccDisplayDiv.textContent = mfccText;
 
-            // Draw waveform
+            // Draw visualizations
             drawWaveform();
+            drawSpectrogram(spectra);
 
             resultsDiv.style.display = 'block';
             hideLoading();
@@ -302,6 +318,57 @@
             ctx.moveTo(0, centerY);
             ctx.lineTo(width, centerY);
             ctx.stroke();
+        }
+
+        function drawSpectrogram(spectra) {
+            const canvas = document.getElementById('spectrogramCanvas');
+            const ctx = canvas.getContext('2d');
+            const width = canvas.width = canvas.offsetWidth;
+            const height = canvas.height = 200;
+
+            if (spectra.length === 0) return;
+
+            const timeFrames = spectra.length;
+            const freqBins = spectra[0].length;
+
+            // Create image data
+            const imageData = ctx.createImageData(width, height);
+            const data = imageData.data;
+
+            // For each pixel
+            for (let x = 0; x < width; x++) {
+                const timeIndex = Math.floor((x / width) * timeFrames);
+                const spectrum = spectra[timeIndex];
+
+                for (let y = 0; y < height; y++) {
+                    const freqIndex = Math.floor((y / height) * freqBins);
+                    const magnitude = spectrum[freqIndex] || 0;
+
+                    // Normalize and convert to color (log scale for better visualization)
+                    const logMag = Math.log10(magnitude + 1);
+                    const normalized = Math.min(logMag / 5, 1); // Adjust divisor for contrast
+
+                    // Color mapping: blue (low) to red (high)
+                    const r = Math.floor(normalized * 255);
+                    const g = Math.floor(normalized * 100);
+                    const b = Math.floor((1 - normalized) * 255);
+
+                    const pixelIndex = (y * width + x) * 4;
+                    data[pixelIndex] = r;     // Red
+                    data[pixelIndex + 1] = g; // Green
+                    data[pixelIndex + 2] = b; // Blue
+                    data[pixelIndex + 3] = 255; // Alpha
+                }
+            }
+
+            // Draw the spectrogram
+            ctx.putImageData(imageData, 0, 0);
+
+            // Add frequency labels (approximate)
+            ctx.fillStyle = '#fff';
+            ctx.font = '12px Arial';
+            ctx.fillText('High Freq', 10, 20);
+            ctx.fillText('Low Freq', 10, height - 10);
         }
 
         function showLoading() {
