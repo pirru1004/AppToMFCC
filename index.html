@@ -49,6 +49,20 @@
             border-radius: 5px;
             display: none;
         }
+        .waveform-container {
+            margin: 20px 0;
+            padding: 15px;
+            background: white;
+            border-radius: 5px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        #waveformCanvas {
+            width: 100%;
+            height: 200px;
+            border: 1px solid #ddd;
+            border-radius: 3px;
+            background: #fafafa;
+        }
         .mfcc-display {
             font-family: 'Courier New', monospace;
             background: #2d3748;
@@ -102,6 +116,11 @@
             <p>Drag and drop an audio file here, or click to select</p>
             <input type="file" id="fileInput" accept="audio/*" style="display: none;">
             <button onclick="document.getElementById('fileInput').click()">Select Audio File</button>
+        </div>
+
+        <div class="waveform-container">
+            <h3>Waveform (Time Domain)</h3>
+            <canvas id="waveformCanvas"></canvas>
         </div>
 
         <div class="results" id="results">
@@ -226,8 +245,63 @@
             }
             mfccDisplayDiv.textContent = mfccText;
 
+            // Draw waveform
+            drawWaveform();
+
             resultsDiv.style.display = 'block';
             hideLoading();
+        }
+
+        function drawWaveform() {
+            const canvas = document.getElementById('waveformCanvas');
+            const ctx = canvas.getContext('2d');
+            const width = canvas.width = canvas.offsetWidth;
+            const height = canvas.height = 200;
+
+            // Clear canvas
+            ctx.clearRect(0, 0, width, height);
+
+            // Get audio data (first channel)
+            const channelData = audioBuffer.getChannelData(0);
+            const samples = channelData.length;
+
+            // Downsample for performance (max 1000 points)
+            const step = Math.max(1, Math.floor(samples / 1000));
+            const downsampled = [];
+            for (let i = 0; i < samples; i += step) {
+                downsampled.push(channelData[i]);
+            }
+
+            const points = downsampled.length;
+
+            // Set up drawing
+            ctx.strokeStyle = '#007bff';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+
+            const centerY = height / 2;
+            const scaleY = height / 2 * 0.8; // Leave some margin
+
+            for (let i = 0; i < points; i++) {
+                const x = (i / (points - 1)) * width;
+                const y = centerY - (downsampled[i] * scaleY);
+
+                if (i === 0) {
+                    ctx.moveTo(x, y);
+                } else {
+                    ctx.lineTo(x, y);
+                }
+            }
+
+            ctx.stroke();
+
+            // Draw center line
+            ctx.strokeStyle = '#ddd';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(0, centerY);
+            ctx.lineTo(width, centerY);
+            ctx.stroke();
         }
 
         function showLoading() {
