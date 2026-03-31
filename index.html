@@ -63,11 +63,16 @@
             border-radius: 5px;
             box-shadow: 0 1px 3px rgba(0,0,0,0.1);
         }
-        #spectrogramCanvas {
+        #waveformCanvas, #spectrogramCanvas {
             width: 100%;
-            height: 200px;
+            height: 300px;
             border: 1px solid #ddd;
             border-radius: 3px;
+        }
+        #waveformCanvas {
+            background: #fafafa;
+        }
+        #spectrogramCanvas {
             background: #000;
             image-rendering: pixelated;
         }
@@ -272,7 +277,7 @@
             const canvas = document.getElementById('waveformCanvas');
             const ctx = canvas.getContext('2d');
             const width = canvas.width = canvas.offsetWidth;
-            const height = canvas.height = 200;
+            const height = canvas.height = 300;
 
             // Clear canvas
             ctx.clearRect(0, 0, width, height);
@@ -311,20 +316,62 @@
 
             ctx.stroke();
 
-            // Draw center line
-            ctx.strokeStyle = '#ddd';
+            // Draw axes and labels
+            ctx.strokeStyle = '#666';
             ctx.lineWidth = 1;
+            ctx.font = '12px Arial';
+            ctx.fillStyle = '#666';
+
+            // Y-axis (amplitude)
             ctx.beginPath();
-            ctx.moveTo(0, centerY);
-            ctx.lineTo(width, centerY);
+            ctx.moveTo(30, 20);
+            ctx.lineTo(30, height - 20);
             ctx.stroke();
+
+            // Y-axis ticks and labels
+            const yTicks = [-1, -0.5, 0, 0.5, 1];
+            yTicks.forEach(tick => {
+                const y = centerY - (tick * scaleY);
+                ctx.beginPath();
+                ctx.moveTo(25, y);
+                ctx.lineTo(35, y);
+                ctx.stroke();
+                ctx.fillText(tick.toFixed(1), 5, y + 4);
+            });
+
+            // X-axis (time)
+            ctx.beginPath();
+            ctx.moveTo(30, centerY);
+            ctx.lineTo(width - 20, centerY);
+            ctx.stroke();
+
+            // X-axis ticks and labels
+            const duration = audioBuffer.duration;
+            const timeTicks = [0, duration * 0.25, duration * 0.5, duration * 0.75, duration];
+            timeTicks.forEach((time, index) => {
+                const x = 30 + ((width - 50) * (time / duration));
+                ctx.beginPath();
+                ctx.moveTo(x, centerY - 5);
+                ctx.lineTo(x, centerY + 5);
+                ctx.stroke();
+                ctx.fillText(time.toFixed(1) + 's', x - 15, centerY + 20);
+            });
+
+            // Axis labels
+            ctx.save();
+            ctx.translate(15, height / 2);
+            ctx.rotate(-Math.PI / 2);
+            ctx.fillText('Amplitude', 0, 0);
+            ctx.restore();
+
+            ctx.fillText('Time (s)', width / 2 - 30, height - 5);
         }
 
         function drawSpectrogram(spectra) {
             const canvas = document.getElementById('spectrogramCanvas');
             const ctx = canvas.getContext('2d');
             const width = canvas.width = canvas.offsetWidth;
-            const height = canvas.height = 200;
+            const height = canvas.height = 300;
 
             if (spectra.length === 0) return;
 
@@ -364,11 +411,78 @@
             // Draw the spectrogram
             ctx.putImageData(imageData, 0, 0);
 
-            // Add frequency labels (approximate)
-            ctx.fillStyle = '#fff';
+            // Draw axes and labels
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 1;
             ctx.font = '12px Arial';
-            ctx.fillText('High Freq', 10, 20);
-            ctx.fillText('Low Freq', 10, height - 10);
+            ctx.fillStyle = '#fff';
+
+            // Y-axis (frequency) - left side
+            ctx.beginPath();
+            ctx.moveTo(30, 20);
+            ctx.lineTo(30, height - 40);
+            ctx.stroke();
+
+            // Frequency ticks and labels
+            const nyquist = audioBuffer.sampleRate / 2;
+            const freqTicks = [0, nyquist * 0.25, nyquist * 0.5, nyquist * 0.75, nyquist];
+            freqTicks.forEach((freq, index) => {
+                const y = 20 + ((height - 60) * (1 - freq / nyquist));
+                ctx.beginPath();
+                ctx.moveTo(25, y);
+                ctx.lineTo(35, y);
+                ctx.stroke();
+                ctx.fillText(Math.round(freq) + ' Hz', 40, y + 4);
+            });
+
+            // X-axis (time) - bottom
+            ctx.beginPath();
+            ctx.moveTo(30, height - 40);
+            ctx.lineTo(width - 20, height - 40);
+            ctx.stroke();
+
+            // Time ticks and labels
+            const duration = audioBuffer.duration;
+            const timeTicks = [0, duration * 0.25, duration * 0.5, duration * 0.75, duration];
+            timeTicks.forEach((time, index) => {
+                const x = 30 + ((width - 50) * (time / duration));
+                ctx.beginPath();
+                ctx.moveTo(x, height - 35);
+                ctx.lineTo(x, height - 45);
+                ctx.stroke();
+                ctx.fillText(time.toFixed(1) + 's', x - 15, height - 20);
+            });
+
+            // Axis labels
+            ctx.save();
+            ctx.translate(15, height / 2);
+            ctx.rotate(-Math.PI / 2);
+            ctx.fillText('Frequency (Hz)', 0, 0);
+            ctx.restore();
+
+            ctx.fillText('Time (s)', width / 2 - 30, height - 5);
+
+            // Colorbar
+            const barWidth = 20;
+            const barHeight = height - 60;
+            const barX = width - 40;
+            const barY = 20;
+
+            for (let i = 0; i < barHeight; i++) {
+                const normalized = 1 - (i / barHeight);
+                const r = Math.floor(normalized * 255);
+                const g = Math.floor(normalized * 100);
+                const b = Math.floor((1 - normalized) * 255);
+
+                ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+                ctx.fillRect(barX, barY + i, barWidth, 1);
+            }
+
+            // Colorbar labels
+            ctx.fillStyle = '#fff';
+            ctx.fillText('High', barX - 25, barY + 10);
+            ctx.fillText('Energy', barX - 30, barY + barHeight / 2);
+            ctx.fillText('Low', barX - 20, barY + barHeight - 5);
         }
 
         function showLoading() {
